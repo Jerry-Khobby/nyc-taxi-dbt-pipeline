@@ -1,0 +1,5 @@
+# Ingestion dependencies installed into the Airflow image.
+# Versions come from Airflow's constraints file (see airflow/Dockerfile).
+# SQLAlchemy and psycopg2 already ship with Airflow, so they are not listed.
+pandas
+pyarrow
