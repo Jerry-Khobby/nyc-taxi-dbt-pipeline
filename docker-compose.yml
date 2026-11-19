@@ -58,7 +58,9 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${WAREHOUSE_USER} -d ${WAREHOUSE_DB}"]
+      # -h forces a TCP check. On first start Postgres runs its init scripts on
+      # a temporary socket-only server, which a plain pg_isready reports as ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${WAREHOUSE_USER} -d ${WAREHOUSE_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -71,9 +73,12 @@ services:
     command:
       - -c
       - |
+        set -e
         mkdir -p /opt/airflow/logs /opt/project/data
         chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs /opt/project/data
         /entrypoint airflow version
+        # The entrypoint does not fail when the migration fails, so check it here.
+        /entrypoint airflow db check-migrations --migration-wait-timeout 0
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: "true"
