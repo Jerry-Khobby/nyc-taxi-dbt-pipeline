@@ -1,0 +1,25 @@
+name: nyc_taxi
+version: "1.0.0"
+profile: nyc_taxi
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+
+clean-targets:
+  - target
+  - dbt_packages
+
+# Cleaning bounds used by the valid_trip_filter macro. Override on the command
+# line, e.g. dbt build --vars '{max_trip_distance_miles: 50}'
+vars:
+  max_trip_distance_miles: 100
+  max_trip_duration_minutes: 180
+
+models:
+  nyc_taxi:
+    staging:
+      +schema: staging
+      +materialized: view
