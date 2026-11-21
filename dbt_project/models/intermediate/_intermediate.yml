@@ -1,0 +1,97 @@
+version: 2
+
+models:
+  - name: int_taxi_zones
+    description: Taxi zones with the is_airport flag. One row per location_id.
+    columns:
+      - name: location_id
+        description: TLC zone ID.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_airport
+        description: True for Newark (EWR), JFK and LaGuardia (service zone Airports).
+        data_tests:
+          - not_null
+
+  - name: int_trips_enriched
+    description: >
+      Cleaned trips from stg_yellow_trips with derived duration, speed, tip
+      percentage, pickup time attributes and airport flags. One row per trip.
+      Feeds fct_trips and the reporting tables.
+    data_tests:
+      # Tips are only recorded for card payments.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "tip_pct is null or payment_type_id = 1"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(airport_location_id is not null) = is_airport_trip"
+    columns:
+      - name: trip_id
+        description: Surrogate key from stg_yellow_trips.
+        data_tests:
+          - unique
+          - not_null
+      - name: trip_duration_minutes
+        description: Minutes from pickup to drop-off.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: "{{ var('max_trip_duration_minutes') }}"
+                inclusive: false
+      - name: avg_speed_mph
+        description: Average speed in miles per hour (trip_distance / duration).
+      - name: is_card_payment
+        description: True if paid by credit card (payment_type_id = 1).
+      - name: tip_pct
+        description: >
+          Tip as a percentage of fare_amount. Card payments only; null for
+          every other payment type because cash tips are not recorded.
+      - name: pickup_date
+        description: Calendar date of pickup.
+      - name: pickup_month
+        description: First day of the pickup month.
+      - name: pickup_hour
+        description: Hour of pickup, 0 to 23.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 23
+      - name: pickup_day_of_week
+        description: ISO day of week of pickup, 1 = Monday to 7 = Sunday.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 7
+      - name: pickup_day_name
+        description: Day name of pickup, for example Monday.
+      - name: is_weekend
+        description: True if pickup was on a Saturday or Sunday.
+      - name: is_airport_pickup
+        description: True if the pickup zone is an airport.
+        data_tests:
+          - not_null
+      - name: is_airport_dropoff
+        description: True if the drop-off zone is an airport.
+        data_tests:
+          - not_null
+      - name: is_airport_trip
+        description: True if the trip starts or ends at an airport.
+        data_tests:
+          - not_null
+      - name: airport_location_id
+        description: >
+          Zone ID of the airport the trip is attributed to, null for
+          non-airport trips. The pickup airport wins if both ends are airports.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('int_taxi_zones')
+                field: location_id
+              config:
+                where: airport_location_id is not null
