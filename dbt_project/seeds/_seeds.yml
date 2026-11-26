@@ -1,0 +1,13 @@
+version: 2
+
+seeds:
+  - name: payment_types
+    config:
+      column_types:
+        payment_type_id: integer
+        payment_type_name: varchar(50)
+  - name: rate_codes
+    config:
+      column_types:
+        rate_code_id: integer
+        rate_code_name: varchar(50)
