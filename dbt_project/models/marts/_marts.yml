@@ -1,0 +1,132 @@
+version: 2
+
+models:
+  - name: dim_zones
+    description: Taxi zones with borough, name and airport flag. One row per zone.
+    columns:
+      - name: location_id
+        description: TLC zone ID.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_airport
+        data_tests:
+          - not_null
+
+  - name: dim_payment_types
+    description: Payment type codes with readable labels.
+    columns:
+      - name: payment_type_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_rate_codes
+    description: Rate codes with readable labels.
+    columns:
+      - name: rate_code_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: fct_trips
+    description: >
+      One row per cleaned trip, with derived duration, speed, tip percentage,
+      pickup time attributes and airport flags. Incremental on loaded_at.
+    columns:
+      - name: trip_id
+        data_tests:
+          - unique
+          - not_null
+      - name: pickup_location_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_zones')
+                field: location_id
+              config:
+                severity: warn
+      - name: dropoff_location_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_zones')
+                field: location_id
+              config:
+                severity: warn
+      - name: payment_type_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_payment_types')
+                field: payment_type_id
+              config:
+                severity: warn
+                where: payment_type_id is not null
+      - name: rate_code_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_rate_codes')
+                field: rate_code_id
+              config:
+                severity: warn
+                where: rate_code_id is not null
+
+  - name: hourly_demand_by_zone
+    description: Trips and revenue per pickup zone, date and hour.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - pickup_location_id
+              - pickup_date
+              - pickup_hour
+    columns:
+      - name: trip_count
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+
+  - name: avg_tip_by_time_of_day
+    description: Tip percentages by weekday and hour. Card payments only.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - pickup_day_of_week
+              - pickup_hour
+    columns:
+      - name: avg_tip_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+              config:
+                severity: warn
+
+  - name: airport_trip_revenue
+    description: Trips and revenue per airport and pickup month.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - airport_location_id
+              - pickup_month
+    columns:
+      - name: airport_location_id
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 132, 138]
+                quote: false
+              config:
+                severity: warn
+      - name: airport_name
+        data_tests:
+          - not_null
