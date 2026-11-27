@@ -9,7 +9,14 @@ models:
         data_tests:
           - unique
           - not_null
+      - name: borough
+        description: NYC borough, or Unknown / N/A for the catch-all zones.
+      - name: zone_name
+        description: Zone name.
+      - name: service_zone
+        description: TLC service zone (Yellow Zone, Boro Zone, Airports, EWR).
       - name: is_airport
+        description: True for Newark (EWR), JFK and LaGuardia.
         data_tests:
           - not_null
 
@@ -17,17 +24,23 @@ models:
     description: Payment type codes with readable labels.
     columns:
       - name: payment_type_id
+        description: TLC payment type code. 1 = credit card.
         data_tests:
           - unique
           - not_null
+      - name: payment_type_name
+        description: Readable payment type, for example Credit card or Cash.
 
   - name: dim_rate_codes
     description: Rate codes with readable labels.
     columns:
       - name: rate_code_id
+        description: TLC rate code in effect at the end of the trip.
         data_tests:
           - unique
           - not_null
+      - name: rate_code_name
+        description: Readable rate code, for example Standard rate or JFK.
 
   - name: fct_trips
     description: >
@@ -35,10 +48,12 @@ models:
       pickup time attributes and airport flags. Incremental on loaded_at.
     columns:
       - name: trip_id
+        description: Surrogate key from stg_yellow_trips.
         data_tests:
           - unique
           - not_null
       - name: pickup_location_id
+        description: Zone where the meter was engaged. Joins to dim_zones.
         data_tests:
           - relationships:
               arguments:
@@ -47,6 +62,7 @@ models:
               config:
                 severity: warn
       - name: dropoff_location_id
+        description: Zone where the meter was disengaged. Joins to dim_zones.
         data_tests:
           - relationships:
               arguments:
@@ -55,6 +71,7 @@ models:
               config:
                 severity: warn
       - name: payment_type_id
+        description: How the passenger paid. Joins to dim_payment_types.
         data_tests:
           - relationships:
               arguments:
@@ -64,6 +81,7 @@ models:
                 severity: warn
                 where: payment_type_id is not null
       - name: rate_code_id
+        description: Rate code in effect at the end of the trip. Joins to dim_rate_codes.
         data_tests:
           - relationships:
               arguments:
@@ -72,6 +90,42 @@ models:
               config:
                 severity: warn
                 where: rate_code_id is not null
+      - name: pickup_at
+        description: When the meter was engaged.
+      - name: dropoff_at
+        description: When the meter was disengaged.
+      - name: trip_distance
+        description: Trip distance in miles.
+      - name: fare_amount
+        description: Time-and-distance fare from the meter.
+      - name: tip_amount
+        description: Tip amount. Card tips only; cash tips are not recorded.
+      - name: total_amount
+        description: Total charged to the passenger, excluding cash tips.
+      - name: trip_duration_minutes
+        description: Minutes from pickup to drop-off.
+      - name: avg_speed_mph
+        description: Average speed in miles per hour.
+      - name: is_card_payment
+        description: True if paid by credit card.
+      - name: tip_pct
+        description: Tip as a percentage of fare_amount. Card payments only; null otherwise.
+      - name: pickup_date
+        description: Calendar date of pickup.
+      - name: pickup_month
+        description: First day of the pickup month.
+      - name: pickup_hour
+        description: Hour of pickup, 0 to 23.
+      - name: pickup_day_of_week
+        description: ISO day of week of pickup, 1 = Monday to 7 = Sunday.
+      - name: is_weekend
+        description: True if pickup was on a Saturday or Sunday.
+      - name: is_airport_trip
+        description: True if the trip starts or ends at an airport.
+      - name: airport_location_id
+        description: Airport the trip is attributed to (pickup wins if both ends are airports). Null for non-airport trips.
+      - name: loaded_at
+        description: When the row was loaded into raw. Drives the incremental filter.
 
   - name: hourly_demand_by_zone
     description: Trips and revenue per pickup zone, date and hour.
@@ -83,13 +137,38 @@ models:
               - pickup_date
               - pickup_hour
     columns:
+      - name: pickup_location_id
+        description: Pickup zone ID.
+      - name: zone_name
+        description: Pickup zone name.
+      - name: borough
+        description: Pickup borough.
+      - name: pickup_date
+        description: Calendar date of pickup.
+      - name: pickup_day_of_week
+        description: ISO day of week, 1 = Monday to 7 = Sunday.
+      - name: pickup_day_name
+        description: Day name, for example Monday.
+      - name: pickup_hour
+        description: Hour of pickup, 0 to 23.
       - name: trip_count
+        description: Number of trips picked up in this zone and hour.
         data_tests:
           - not_null
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 0
                 inclusive: false
+      - name: total_passengers
+        description: Sum of passenger_count. Trips with a null count are not included.
+      - name: avg_trip_distance
+        description: Average trip distance in miles.
+      - name: avg_fare
+        description: Average fare_amount.
+      - name: fare_revenue
+        description: Sum of fare_amount.
+      - name: total_revenue
+        description: Sum of total_amount.
 
   - name: avg_tip_by_time_of_day
     description: Tip percentages by weekday and hour. Card payments only.
@@ -100,7 +179,16 @@ models:
               - pickup_day_of_week
               - pickup_hour
     columns:
+      - name: pickup_day_of_week
+        description: ISO day of week, 1 = Monday to 7 = Sunday.
+      - name: pickup_day_name
+        description: Day name, for example Monday.
+      - name: pickup_hour
+        description: Hour of pickup, 0 to 23.
+      - name: card_trip_count
+        description: Number of card-paid trips in this weekday and hour.
       - name: avg_tip_pct
+        description: Average of the per-trip tip percentages.
         data_tests:
           - dbt_utils.accepted_range:
               arguments:
@@ -108,6 +196,10 @@ models:
                 max_value: 100
               config:
                 severity: warn
+      - name: median_tip_pct
+        description: Median per-trip tip percentage. Less affected by outliers than the average.
+      - name: weighted_tip_pct
+        description: Total tips divided by total fares, as a percentage.
 
   - name: airport_trip_revenue
     description: Trips and revenue per airport and pickup month.
@@ -119,6 +211,7 @@ models:
               - pickup_month
     columns:
       - name: airport_location_id
+        description: Airport zone ID (1 Newark, 132 JFK, 138 LaGuardia).
         data_tests:
           - not_null
           - accepted_values:
@@ -128,5 +221,22 @@ models:
               config:
                 severity: warn
       - name: airport_name
+        description: Airport zone name.
         data_tests:
           - not_null
+      - name: pickup_month
+        description: First day of the pickup month.
+      - name: trip_count
+        description: Trips attributed to this airport in the month.
+      - name: trips_from_airport
+        description: Trips picked up at this airport.
+      - name: trips_to_airport
+        description: Trips dropped off at this airport whose pickup was not at an airport.
+      - name: avg_trip_distance
+        description: Average trip distance in miles.
+      - name: avg_fare
+        description: Average fare_amount.
+      - name: fare_revenue
+        description: Sum of fare_amount.
+      - name: total_revenue
+        description: Sum of total_amount.
