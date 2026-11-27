@@ -33,4 +33,3 @@ group by
     pickup_day_of_week,
     pickup_day_name,
     pickup_hour
-order by pickup_day_of_week, pickup_hour

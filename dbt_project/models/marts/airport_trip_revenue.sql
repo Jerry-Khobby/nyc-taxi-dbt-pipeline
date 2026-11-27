@@ -54,4 +54,3 @@ select
 from aggregated
 left join airports
     on aggregated.airport_location_id = airports.location_id
-order by aggregated.pickup_month, aggregated.airport_location_id
